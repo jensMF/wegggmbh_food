@@ -22,4 +22,4 @@ jobs:
           goarch: ${{ matrix.goarch }}
           project_path: "."
           binary_name: "wegggmbh_food"
-          extra_files: LICENSE Readme.md
+          extra_files: LICENSE README.md
