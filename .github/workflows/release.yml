@@ -14,13 +14,12 @@ jobs:
         goos: [linux darwin windows]
         goarch: [amd64]
     steps:
-      - uses: actions/checkout@v2
-      - uses: wangyoucao577/go-release-action@v1.18
+      - uses: actions/checkout@v3
+      - uses: wangyoucao577/go-release-action@1.18
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
           project_path: "."
           binary_name: "wegggmbh_food"
-          ldflags: "-s -w"
           extra_files: LICENSE Readme.md
