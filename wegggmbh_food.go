@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -31,6 +32,18 @@ const baseurl = "https://www.wegggmbh.de/intern/index.php"
 const action = "essen"
 
 const schliesszeitenKiTa = "2022-7-25..2022-8-5 2022-9-27 2022-9-28 2022-10-11 2022-12-20..2023-1-2 2023-5-19 2023-10-2 2023-8-14..2023-8-25"
+
+type HolidaysApiResponse struct {
+	Status   string    `json:"status"`
+	Holidays []Holiday `json:"feiertage"`
+}
+type Holiday struct {
+	Date    string `json:"date"`
+	Fname   string `json:"fname"`
+	Comment string `json:"comment"`
+}
+
+var holidays []time.Time
 
 func init() {
 	jar, err := cookiejar.New(nil)
@@ -130,8 +143,10 @@ func placeOrCancelOrder(cancelOrder bool, message string) bool {
 			}
 		}
 
+		holidays = getHolidays()
 		closedKiTaDates := parseDateString(schliesszeitenKiTa, cut_offDate)
 		dates, _ = filter(dates, closedKiTaDates, false)
+		dates, _ = filter(dates, holidays, false)
 		dates, datesStr := filter(dates, placedOdersDates, cancelOrder)
 
 		var str string
@@ -277,6 +292,35 @@ func parseDateString(datesStr string, cut_offDate time.Time) (dates []time.Time)
 			}
 		}
 	}
+	return
+}
+
+func getHolidays() (out []time.Time) {
+
+	var holidaysApiResponse HolidaysApiResponse
+
+	holidaysJson, err := client.Get("https://get.api-feiertage.de?states=be")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer holidaysJson.Body.Close()
+
+	body, err := ioutil.ReadAll(holidaysJson.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err1 := json.Unmarshal(body, &holidaysApiResponse)
+	if err1 != nil {
+		fmt.Println(err1)
+	}
+
+	for _, holiday := range holidaysApiResponse.Holidays {
+		date, _ := time.Parse(dateForm, holiday.Date)
+		out = append(out, date)
+	}
+
 	return
 }
 
