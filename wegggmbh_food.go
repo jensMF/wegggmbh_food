@@ -57,35 +57,51 @@ func init() {
 
 func main() {
 	// Login
-	var username string
-	for !isMailaddressValid(username) {
-		fmt.Fprintf(os.Stderr, "Please enter your username: ")
-		fmt.Scanln(&username)
-		if !isMailaddressValid(username) {
-			fmt.Fprint(os.Stderr, color.InRed("error: invalid username: "+username+"\n"))
+	loginSuccessful := false
+	for !loginSuccessful {
+		var username string
+		for !isMailaddressValid(username) {
+			fmt.Fprintf(os.Stderr, "Please enter your username: ")
+			fmt.Scanln(&username)
+			if !isMailaddressValid(username) {
+				fmt.Fprint(os.Stderr, color.InRed("error: invalid username: "+username+"\n"))
+			}
 		}
-	}
-	var password string
-	for strings.TrimSpace(password) == "" {
-		fmt.Fprintf(os.Stderr, "Please enter your password: ")
-		bytePassword, err := term.ReadPassword(int(syscall.Stdin))
+		var password string
+		for strings.TrimSpace(password) == "" {
+			fmt.Fprintf(os.Stderr, "Please enter your password: ")
+			bytePassword, err := term.ReadPassword(int(syscall.Stdin))
+			if err != nil {
+				log.Fatal(err)
+				password = ""
+			} else {
+				password = string(bytePassword)
+			}
+		}
+		fmt.Println("")
+		data := url.Values{
+			"login;req":    {username},
+			"password;req": {password},
+			"Anmelden":     {"Anmelden"},
+		}
+
+		loginResponse, err1 := client.PostForm(baseurl, data)
+		if err1 != nil {
+			log.Fatal(err1)
+		}
+		defer loginResponse.Body.Close()
+
+		loginBody, err := ioutil.ReadAll(loginResponse.Body)
 		if err != nil {
 			log.Fatal(err)
-			password = ""
-		} else {
-			password = string(bytePassword)
 		}
-	}
-	fmt.Println("")
-	data := url.Values{
-		"login;req":    {username},
-		"password;req": {password},
-		"Anmelden":     {"Anmelden"},
-	}
 
-	_, err1 := client.PostForm(baseurl, data)
-	if err1 != nil {
-		log.Fatal(err1)
+		if !strings.Contains(string(loginBody), "<div id=\"login\">") {
+			loginSuccessful = true
+		} else {
+			fmt.Fprint(os.Stderr, color.InRed("wrong Username/Password\n"))
+		}
+
 	}
 
 	updatePlacedOrdersAndServerTime(false)
@@ -217,13 +233,17 @@ func updatePlacedOrdersAndServerTime(createBackup bool) (placedOdersDates []time
 	}
 
 	if createBackup {
-		err = ioutil.WriteFile("ordered_dates_backup_"+serverTime.Format("2006-01-02_15-04-05_MST")+".txt", body, 0777)
+		err = ioutil.WriteFile("ordered_dates_backup_"+serverTime.Format("2006-01-02_15-04-05_MST")+".txt", body, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	placedOdersSourceStr := strings.Split(strings.Trim(strings.ReplaceAll(string(body), "\"", ""), "[]"), ",")
+	var placedOdersSourceStr []string
+	err = json.Unmarshal(body, &placedOdersSourceStr)
+	if err != nil {
+		fmt.Println(err)
+	}
 	var placedOdersDatesStr string
 	for _, dateStr := range placedOdersSourceStr {
 		date, _ := time.Parse(dateForm, dateStr)
