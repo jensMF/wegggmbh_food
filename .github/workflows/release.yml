@@ -27,3 +27,4 @@ jobs:
           goarch: ${{ matrix.goarch }}
           project_path: "."
           binary_name: "wegggmbh_food"
+          executable_compression: "upx"

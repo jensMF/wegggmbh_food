@@ -31,6 +31,8 @@ const cancelOrder = true
 const baseurl = "https://www.wegggmbh.de/intern/index.php"
 const action = "essen"
 
+const oneDaysTime = 86400000000000
+
 const schliesszeitenKiTa = "2022-7-25..2022-8-5 2022-9-27 2022-9-28 2022-10-11 2022-12-20..2023-1-2 2023-5-19 2023-10-2 2023-8-14..2023-8-25"
 
 type HolidaysApiResponse struct {
@@ -161,9 +163,9 @@ func placeOrCancelOrder(cancelOrder bool, message string) bool {
 
 		holidays = getHolidays()
 		closedKiTaDates := parseDateString(schliesszeitenKiTa, cut_offDate)
-		dates, _ = filter(dates, closedKiTaDates, false)
-		dates, _ = filter(dates, holidays, false)
-		dates, datesStr := filter(dates, placedOdersDates, cancelOrder)
+		dates = filter(dates, closedKiTaDates, false)
+		dates = filter(dates, holidays, false)
+		dates = filter(dates, placedOdersDates, cancelOrder)
 
 		var str string
 		if cancelOrder {
@@ -174,9 +176,9 @@ func placeOrCancelOrder(cancelOrder bool, message string) bool {
 
 		if len(dates) != 0 {
 			if cancelOrder {
-				fmt.Println(color.InBold("\n"+str+" dates:\n"), color.InYellow(datesStr))
+				prettyPrintCalendar(dates, color.Yellow)
 			} else {
-				fmt.Println(color.InBold("\n"+str+" dates:\n"), color.InGreen(datesStr))
+				prettyPrintCalendar(dates, color.Green)
 			}
 			ok := YesNoPrompt("Do you want to "+str+" orders for these dates?", true)
 			if ok {
@@ -244,29 +246,12 @@ func updatePlacedOrdersAndServerTime(createBackup bool) (placedOdersDates []time
 	if err != nil {
 		fmt.Println(err)
 	}
-	var placedOdersDatesStr string
+
 	for _, dateStr := range placedOdersSourceStr {
 		date, _ := time.Parse(dateForm, dateStr)
 		placedOdersDates = append(placedOdersDates, date)
-		if date.Weekday() == time.Friday {
-			placedOdersDatesStr = placedOdersDatesStr + " " + date.Format(printDateFormat) + "\n"
-		} else {
-			placedOdersDatesStr = placedOdersDatesStr + " " + date.Format(printDateFormat)
-		}
 	}
-	datePlaceholder := "... ... ... ..."
-	fmt.Println(color.InBold("placed food orders:"))
-	if placedOdersDates[0].Weekday() == time.Monday {
-		fmt.Println(placedOdersDatesStr)
-	} else if placedOdersDates[0].Weekday() == time.Tuesday {
-		fmt.Println(color.InBlue(" "+datePlaceholder) + placedOdersDatesStr)
-	} else if placedOdersDates[0].Weekday() == time.Wednesday {
-		fmt.Println(color.InBlue(" "+datePlaceholder+" "+datePlaceholder) + placedOdersDatesStr)
-	} else if placedOdersDates[0].Weekday() == time.Thursday {
-		fmt.Println(color.InBlue(" "+datePlaceholder+" "+datePlaceholder+" "+datePlaceholder) + placedOdersDatesStr)
-	} else if placedOdersDates[0].Weekday() == time.Friday {
-		fmt.Println(color.InBlue(" "+datePlaceholder+" "+datePlaceholder+" "+datePlaceholder+" "+datePlaceholder) + placedOdersDatesStr)
-	}
+	prettyPrintCalendar(placedOdersDates, color.White)
 	return
 }
 
@@ -361,21 +346,87 @@ func parseDateRangeEdges(dateRangeStr string) (time.Time, time.Time, error) {
 	}
 }
 
-func filter(toFilter []time.Time, filter []time.Time, intersection bool) (out []time.Time, outStr string) {
-	f := make(map[time.Time]struct{}, len(filter))
-	for _, u := range filter {
-		f[u] = struct{}{}
-	}
-	for i, u := range toFilter {
-		if _, ok := f[u]; ok == intersection {
-			out = append(out, u)
-			if i == 0 {
-				outStr = outStr + u.Format(printDateFormat)
-			} else if u.Weekday() == time.Friday {
-				outStr = outStr + " " + u.Format(printDateFormat) + "\n"
-			} else {
-				outStr = outStr + " " + u.Format(printDateFormat)
+func prettyPrintCalendar(calendar []time.Time, colour string) {
+	datePlaceholder := "... ... ... ..."
+
+	monday := getLastMonday(calendar[0])
+
+	for index, date := range calendar {
+		mondayDiff := int(date.Sub(monday)) / oneDaysTime
+		if index == 0 {
+			fmt.Print(" ")
+			if mondayDiff > 0 {
+				for i := 0; i < mondayDiff; i++ {
+					fmt.Print(color.InBlue(datePlaceholder) + "  ")
+				}
 			}
+			fmt.Print(color.Ize(colour, date.Format(printDateFormat)+"  "))
+		} else if mondayDiff > 4 {
+			monday = getLastMonday(date)
+			lastFridayDiff := getNextFridayDiff(calendar[index-1])
+			if lastFridayDiff > 0 {
+				for i := 0; i < lastFridayDiff; i++ {
+					fmt.Print(color.InBlue(datePlaceholder) + "  ")
+				}
+			}
+			mondayDiff = int(date.Sub(monday)) / oneDaysTime
+			fmt.Println("")
+			fmt.Print(" ")
+			if mondayDiff > 0 {
+				for i := 0; i < mondayDiff; i++ {
+					fmt.Print(color.InBlue(datePlaceholder) + "  ")
+				}
+			}
+			fmt.Print(color.Ize(colour, date.Format(printDateFormat)+"  "))
+		} else if index > 0 {
+			entryDiff := int(date.Sub(calendar[index-1])) / oneDaysTime
+			if entryDiff > 1 {
+				for i := 1; i < int(entryDiff); i++ {
+					fmt.Print(color.InBlue(datePlaceholder) + "  ")
+				}
+			}
+			fmt.Print(color.Ize(colour, date.Format(printDateFormat)+"  "))
+		}
+	}
+	fmt.Println("")
+}
+
+func getLastMonday(date time.Time) (monday time.Time) {
+	if date.Weekday() == time.Friday {
+		monday = date.AddDate(0, 0, -4)
+	} else if date.Weekday() == time.Thursday {
+		monday = date.AddDate(0, 0, -3)
+	} else if date.Weekday() == time.Wednesday {
+		monday = date.AddDate(0, 0, -2)
+	} else if date.Weekday() == time.Tuesday {
+		monday = date.AddDate(0, 0, -1)
+	} else {
+		monday = date
+	}
+	return
+}
+
+func getNextFridayDiff(date time.Time) int {
+	if date.Weekday() == time.Monday {
+		return 4
+	} else if date.Weekday() == time.Tuesday {
+		return 3
+	} else if date.Weekday() == time.Wednesday {
+		return 2
+	} else if date.Weekday() == time.Thursday {
+		return 1
+	}
+	return 0
+}
+
+func filter(toFilter []time.Time, filter []time.Time, intersection bool) (out []time.Time) {
+	f := make(map[time.Time]struct{}, len(filter))
+	for _, date := range filter {
+		f[date] = struct{}{}
+	}
+	for _, date := range toFilter {
+		if _, ok := f[date]; ok == intersection {
+			out = append(out, date)
 		}
 	}
 	return
