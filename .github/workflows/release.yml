@@ -25,4 +25,4 @@ jobs:
           goarch: ${{ matrix.goarch }}
           project_path: "."
           binary_name: "wegggmbh_food"
-          pre_command: "apt-get install build-essential"
+          pre_command: "apt-get update && apt-get upgrade -y"
